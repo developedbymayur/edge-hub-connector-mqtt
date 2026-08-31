@@ -1,0 +1,50 @@
+{
+  "name": "@developedbymayur/node-red-contrib-azure-iot-edge-mqtt",
+  "version": "0.1.0",
+  "description": "Azure IoT Edge MQTT nodes for Node-RED with a shared resilient EdgeHub client",
+  "main": "src/node-red-mqtt.js",
+  "license": "MIT",
+  "keywords": [
+    "node-red",
+    "node-red-contrib",
+    "azure",
+    "azure-iot",
+    "azure-iot-edge",
+    "iot-edge",
+    "mqtt"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/developedbymayur/edge-hub-connector-mqtt.git"
+  },
+  "bugs": {
+    "url": "https://github.com/developedbymayur/edge-hub-connector-mqtt/issues"
+  },
+  "homepage": "https://github.com/developedbymayur/edge-hub-connector-mqtt#readme",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "azure-iot-device": "1.18.4",
+    "azure-iot-device-mqtt": "1.16.4"
+  },
+  "scripts": {
+    "test": "node test/smoke-test.js && node test/client-manager-test.js",
+    "pack:check": "npm pack --dry-run"
+  },
+  "files": [
+    "src",
+    "examples",
+    "README.md",
+    "LICENSE"
+  ],
+  "node-red": {
+    "version": ">=5.0.0",
+    "nodes": {
+      "azureiotedgemqtt": "src/node-red-mqtt.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
