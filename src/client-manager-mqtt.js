@@ -36,7 +36,7 @@ class EdgeHubMqttClientManager extends EventEmitter {
     }
 
     isConnected() {
-        return Boolean(this.client);
+        return this.client !== null && this.connecting === false;
     }
 
     getClient() {
@@ -176,10 +176,9 @@ class EdgeHubMqttClientManager extends EventEmitter {
         this.attachMethodHandler(methodName, entry, this.client);
         return () => {
             const current = this.methodHandlers.get(methodName);
-            if (current === entry) {
-                this.detachMethodHandler(entry, methodName);
-                this.methodHandlers.delete(methodName);
-            }
+            if (current !== entry) return;
+            this.detachMethodHandler(entry);
+            this.methodHandlers.delete(methodName);
         };
     }
 
@@ -189,11 +188,10 @@ class EdgeHubMqttClientManager extends EventEmitter {
         entry.client = client;
     }
 
-    detachMethodHandler(entry, methodName) {
-        // ModuleClient does not expose a public removeMethod API. Closing the client
-        // removes transport listeners; clear our client marker so reconnect reattaches.
+    detachMethodHandler(entry) {
+        // ModuleClient has no public removeMethod method. The entry is cleared so a
+        // replacement client cannot reattach a handler that has been removed from the flow.
         entry.client = null;
-        void methodName;
     }
 
     addTwinDesiredListener(handler) {
