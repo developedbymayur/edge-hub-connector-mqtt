@@ -2,239 +2,296 @@
 
 ## Purpose
 
-This repository is a separate workstream for building and testing an Azure IoT Edge Node-RED MQTT connector for Azure IoT Edge 1.6.x.
+This repository is the separate workstream for building and testing an Azure IoT Edge Node-RED MQTT connector for Azure IoT Edge 1.6.x.
 
-Do not modify or merge this work into the AMQP repository unless explicitly decided later.
+Do not continue MQTT implementation in the AMQP repository. The AMQP project remains a separate reference and working stream.
 
-## Reference AMQP Project
+## Base repository / source project
 
-Reference repository:
+The MQTT implementation must be based on:
+
+- https://github.com/iotblackbelt/noderededgemodule
+
+Use that repository as the primary functional/reference baseline for the MQTT Node-RED integration.
+
+A key project requirement is to study Azure IoT Edge 1.6 itself before deciding how the MQTT implementation should work. Do not blindly reuse assumptions from older Azure IoT Edge versions or from the AMQP implementation.
+
+## Reference AMQP project
+
+The working AMQP project is:
+
 - https://github.com/developedbymayur/edge-hub-connector
 
-The AMQP project is a working reference for the desired Node-RED user experience and production discipline. The current AMQP package exposes four public Node-RED nodes and uses one shared resilient AMQP client internally.
+Current AMQP package:
 
-Important architectural expectation:
+- `@developedbymayur/node-red-contrib-azure-iot-edge-amqp`
+- Current tested version: `0.5.1`
 
-```text
-Node-RED nodes
-  ├── Module Input
-  ├── Module Output
-  ├── Module Twin
-  └── Module Method
-          |
-          v
-    one shared client
-          |
-          v
-       EdgeHub
-```
+The AMQP project is a reference for:
+- desired Node-RED user experience
+- shared connection lifecycle
+- status/logging discipline
+- packaging
+- test-record discipline
+- production-readiness expectations
 
-The MQTT implementation should preserve the same user-facing philosophy where appropriate, but it must be based on verified Azure IoT Edge 1.6 MQTT behavior and SDK/API support rather than assumptions copied from the AMQP implementation.
+Do not copy AMQP transport internals without verifying MQTT-specific Azure IoT Edge 1.6 requirements.
 
-## Current Environment Used for Validation
+## Current known validation environment
 
-Known test environment from the AMQP work:
+From the AMQP project:
+
 - Azure IoT Edge: 1.6.0
+- Edge Agent: 1.6.0
+- Edge Hub: 1.6.0
 - Node-RED: 5.0.4
-- Node.js inside the Node-RED 5.0.4 image: 24.18.1
-- Azure IoT Edge Hub image: 1.6.0
+- Node.js in the current Node-RED image: 24.18.1
 - OPC Publisher: 2.9.15
 - Simulated Temperature Sensor: 1.5
 
-Example deployment module:
-- Module name: `NodeRedData`
+Example module:
+- `NodeRedData`
 
-Example Edge device:
+Example device:
 - `IoT-Edge-AUCPL-ChSambhajiNagar-QA`
 
-Example EdgeHub routes:
+These are reference values for testing. Verify MQTT compatibility independently.
 
-```json
-{
-  "NodeRedDatatoUpstream": "FROM /messages/modules/NodeRedData/outputs/* INTO $upstream",
-  "OpcPublisherToNodeRedData": "FROM /messages/modules/OpcPublisher/* INTO BrokeredEndpoint(\"/modules/NodeRedData/inputs/OpcPublisher\")",
-  "SimulatedTemperatureSensorToNodeRedData": "FROM /messages/modules/SimulatedTemperatureSensor/* INTO BrokeredEndpoint(\"/modules/NodeRedData/inputs/SimulatedTemperatureSensor\")"
-}
-```
+## Mandatory first activities in the new MQTT chat
 
-These are reference routes for testing and understanding the intended message path. Verify all MQTT-specific requirements independently.
+Do these in order. Do not start coding before the research/verification step is complete.
 
-## Mandatory First Activities in the New MQTT Chat
+### 1. Retrieve and inspect this repository
 
-### 1. Study Azure IoT Edge 1.6 architecture
+Start with:
 
-Before writing MQTT code, inspect and document the actual Azure IoT Edge 1.6 behavior for:
+- repository metadata
+- current files
+- package metadata
+- Node-RED node definitions
+- existing tests/CI if present
+
+Then inspect the base repository:
+
+- https://github.com/iotblackbelt/noderededgemodule
+
+Understand exactly what functionality and Node-RED behavior the existing implementation provides.
+
+### 2. Study Azure IoT Edge 1.6
+
+Study the actual Azure IoT Edge 1.6 architecture, especially:
+
 - Edge Agent 1.6
 - Edge Hub 1.6
-- supported inbound module protocols
-- supported outbound/cloud protocols
-- local module authentication and workload API behavior
-- routing semantics for module-to-module and module-to-cloud messages
-- configuration required to enable MQTT
-- protocol ports and TLS expectations
-- MQTT topic conventions used by EdgeHub
+- protocol heads / MQTT support
+- local module authentication
+- workload API / identity flow
+- module-to-module routing
+- module-to-cloud routing
+- MQTT ports and TLS behavior
+- EdgeHub topic conventions
+- startup ordering and reconnect behavior
+- cloud forwarding and store-and-forward
 
-Use current Microsoft documentation and source/code where needed. Do not infer protocol behavior solely from the old MQTT connector.
+Use current Microsoft documentation and Azure IoT Edge source/code as authoritative references where applicable.
 
-### 2. Study the SDK/API path actually supported by Edge 1.6
+### 3. Study the actual SDK/API path
 
-Determine exactly which Node.js Azure IoT SDK/package should be used for an MQTT-based module connection in Edge 1.6.
+Determine which SDK/API is actually appropriate for an Azure IoT Edge 1.6 module using MQTT.
 
-Verify:
-- module authentication through the Edge workload identity flow
-- MQTT transport availability
-- Node.js/runtime compatibility
-- current package versions that work with Node-RED 5.x / Node.js 24.x
-- connection lifecycle APIs
-- message receive/send APIs
+Verify before selecting dependencies:
+
+- Node.js compatibility
+- Azure IoT Node.js SDK package/version
+- MQTT transport/package support
+- authentication through the Edge workload identity
+- connect/open lifecycle
+- send API
+- receive/subscription API
 - message completion/acknowledgment semantics
 - twin APIs
 - direct-method APIs
 - reconnect behavior
 
-Explicitly compare SDK versions and avoid introducing a dependency only because it existed in the earlier implementation.
+Do not select a package solely because it was used by an older implementation.
 
-### 3. Inspect the old/reference MQTT implementation
+### 4. Compare old MQTT behavior with the desired architecture
 
-Locate the previous Node-RED MQTT connector behavior used before the AMQP migration.
+The previous MQTT implementation had the following desired model:
 
-The key requirement from the project owner is:
-- one MQTT client connection per Node-RED runtime
-- multiple Node-RED nodes reuse the same client
-- nodes differ primarily by configured route/input/output names
+```text
+One Node-RED runtime
+        |
+        +-- Module Input
+        +-- Module Output
+        +-- Module Twin / supported operations
+        |
+        +----> ONE shared MQTT client / connection
+```
 
-Preserve functional behavior from the previous connector wherever technically possible.
+Multiple Node-RED nodes should reuse one underlying MQTT client/connection. Node configuration should primarily define route/input/output/method names rather than creating separate transport connections.
 
-### 4. Fork/copy strategy
+Preserve existing functional behavior where supported by the verified Azure IoT Edge 1.6 MQTT architecture.
 
-Do not blindly copy AMQP transport code into this repository.
+### 5. Architecture decision
 
-Use the AMQP repository as a reference for:
-- package structure
-- Node-RED node layout
-- test discipline
-- documentation
-- logging/status presentation
-- packaging
-- shared-client lifecycle architecture
+Only after steps 1-4:
 
-But implement the MQTT transport based on verified Edge 1.6 requirements.
+- document the verified MQTT architecture
+- decide whether MQTT can support the same four public nodes as AMQP
+- identify any operations that MQTT cannot support directly
+- explicitly document any limitations instead of emulating unsupported behavior
+- decide the shared-client lifecycle and reconnection design
 
-## Intended Public Node-RED Interface
+## Target public Node-RED interface
 
-Target four public nodes unless the verified MQTT architecture shows a strong reason otherwise:
+Target four public nodes unless research proves a different design is required:
 
 1. Module Input (MQTT)
 2. Module Output (MQTT)
 3. Module Twin (MQTT)
 4. Module Method (MQTT)
 
-The underlying MQTT connection manager should be internal and shared.
+The MQTT connection/client manager should be internal.
 
-Do not expose a separate client/connection node unless testing proves it is required for correct Node-RED lifecycle behavior.
+Do not expose a separate client node unless testing proves it is required for correct operation.
 
-## Functional Requirements
+## Functional goals
 
-The MQTT package must support, as applicable to the verified Edge 1.6 MQTT API:
-- receiving module input messages
-- sending module output messages
-- module twin desired-property handling
-- module twin reported-property updates
-- direct methods
-- JSON payloads
-- string payloads
-- Buffer payloads
-- EdgeHub module-to-module routing
-- NodeRedData output routed upstream to IoT Hub
+Where supported by Azure IoT Edge 1.6 MQTT:
 
-Do not intentionally change the existing functional contract merely to simplify implementation.
+### Module Input
 
-## Resilience Requirements
+Receive messages from a named EdgeHub module input/route and emit them into Node-RED.
 
-This is a critical requirement.
+### Module Output
 
-The MQTT implementation must be tested for:
+Send `msg.payload` to a named EdgeHub module output so EdgeHub can route it locally or upstream to IoT Hub.
+
+### Module Twin
+
+Support desired-property reception and reported-property updates where the verified MQTT/API path supports them.
+
+### Module Method
+
+Verify whether direct methods are available through the selected MQTT mechanism. If not supported, document the limitation rather than inventing an unsupported protocol behavior.
+
+Payload behavior should cover, where appropriate:
+
+- JSON objects
+- strings
+- Buffers
+- non-JSON content
+
+## Resilience requirements
+
+This is a primary requirement.
+
+The MQTT implementation must handle startup ordering and reconnect without requiring manual restarts.
+
+Required behavior:
 
 ```text
 Node-RED starts before EdgeHub
-        -> connection retries
-        -> connection succeeds later
-        -> nodes become operational
+        -> MQTT connection retries
+        -> EdgeHub becomes available
+        -> connection succeeds
+        -> subscriptions/listeners become active
 ```
 
 ```text
 Established MQTT connection drops
         -> disconnect detected
         -> automatic reconnect
-        -> subscriptions restored
+        -> subscriptions/listeners restored
         -> telemetry resumes
 ```
 
 ```text
-One AMQP/MQTT node is removed
+One Node-RED MQTT node removed
         -> shared MQTT client remains active
-        -> other nodes continue working
+        -> remaining nodes continue working
 ```
 
 ```text
-Last MQTT node is removed
-        -> shared client closes cleanly
+Last MQTT node removed
+        -> shared MQTT client closes cleanly
 ```
 
-A manual restart of both Node-RED and the source sensor must NOT be required to recover normal message flow.
+A manual restart of both Node-RED and the source module must not be required to recover ordinary operation.
 
-## Test Record Format
+## Test record
 
-Maintain test results using this structure:
+Maintain a running test table throughout the project:
 
 | TC | Test Case | Action | Expected Result | Actual Result | Status | Remarks |
 |---|---|---|---|---|---|---|
-| TC-01 | Basic input | | | | | |
-| TC-02 | Basic output/cloud | | | | | |
-| TC-03 | Multiple MQTT nodes / shared client | | | | | |
-| TC-04 | Node-RED restart | | | | | |
-| TC-05 | EdgeHub startup ordering | | | | | |
-| TC-06 | MQTT disconnect/reconnect | | | | | |
-| TC-07 | Cloud outage/store-and-forward | | | | | |
-| TC-08 | Module Twin | | | | | |
-| TC-09 | Direct Method | | | | | |
-| TC-10 | Payload compatibility | | | | | |
-| TC-11 | Long-running stability | | | | | |
+| TC-01 | Basic MQTT connection | | | | | |
+| TC-02 | Module input | | | | | |
+| TC-03 | Module output to EdgeHub | | | | | |
+| TC-04 | Cloud telemetry | | | | | |
+| TC-05 | Multiple MQTT nodes / shared client | | | | | |
+| TC-06 | Node-RED restart | | | | | |
+| TC-07 | EdgeHub startup ordering | | | | | |
+| TC-08 | MQTT disconnect/reconnect | | | | | |
+| TC-09 | Listener/subscription restoration | | | | | |
+| TC-10 | Cloud outage/store-and-forward | | | | | |
+| TC-11 | Module Twin | | | | | |
+| TC-12 | Direct Method | | | | | |
+| TC-13 | Payload compatibility | | | | | |
+| TC-14 | Long-running stability | | | | | |
 
-## Production Readiness Requirements
+Record exact commands, logs, observed timestamps, and cloud evidence rather than relying only on the Node-RED UI.
 
-Before publishing to npm / Node-RED Palette Manager:
+## AMQP baseline already proven
+
+The AMQP project has already demonstrated this complete telemetry path:
+
+```text
+SimulatedTemperatureSensor
+        -> EdgeHub
+        -> NodeRedData Module Input
+        -> NodeRedData Module Output
+        -> EdgeHub
+        -> IoT Hub
+```
+
+It also demonstrated a working AMQP SDK-level module connection and cloud telemetry through `NodeRedData`.
+
+These results are a baseline only. MQTT must be independently validated.
+
+## Production readiness before publication
+
+Before publishing the MQTT package to npm / Node-RED Palette Manager:
+
 - package metadata is correct
-- public node count matches intended design
-- runtime package contents are minimal and reviewed
-- repository README is complete
-- local package smoke tests pass
-- package-content check passes
-- automated unit/integration tests cover connection lifecycle
-- startup ordering is tested
-- reconnect is tested
-- multiple-node shared-client behavior is tested
-- no manual container restart is required for recovery
-- Node-RED editor configuration/help text is clean
-- logs and node status make failures diagnosable
+- package name/version are finalized
+- public node count is intentional and documented
+- package contents are minimal and reviewed
+- README is complete
+- example flow is included
+- npm pack content is reviewed
+- smoke/unit tests pass
+- behavioral lifecycle tests pass
+- multiple-node shared-client behavior is proven
+- startup ordering is proven
+- reconnect is proven
+- no manual source-module restart is required for recovery
+- Node-RED editor UI is polished
+- node status/logging is diagnostic
+- no secrets/connection strings are committed
+- MQTT limitations are explicitly documented
 
-## Important Lessons from AMQP Testing
+## Starting sequence for the new MQTT chat
 
-During AMQP testing:
-- A standalone `ModuleClient.fromEnvironment(Amqp)` connection successfully connected to EdgeHub and retrieved the twin.
-- Node-RED successfully received SimulatedTemperatureSensor data.
-- Node-RED Module Output successfully called `sendOutputEvent()`.
-- Azure CLI `az iot hub monitor-events` confirmed `NodeRedData` telemetry arriving in IoT Hub.
-- The EdgeHub cloud connection was established over AMQP.
-- Early versions required restarting both NodeRedData and the simulated sensor to restore flow, which motivated stronger connection lifecycle/reconnect handling.
-- A confusing `Input completion failed: undefined` was observed when considering duplicate input listeners; duplicate identical inputs are not a normal deployment requirement and should not drive the primary design.
+The new chat should proceed one step/command at a time.
 
-These observations are context only. Verify MQTT behavior independently.
+1. Retrieve this handoff file.
+2. Inspect the new repository.
+3. Inspect `https://github.com/iotblackbelt/noderededgemodule`.
+4. Research Azure IoT Edge 1.6 Edge Agent and Edge Hub MQTT architecture.
+5. Research and verify the supported SDK/API path.
+6. Summarize findings and architecture.
+7. Only then create/modify implementation files.
 
-## Working Rule for the New Chat
-
-Start with research and verification, then architecture, then code.
-
-Do not immediately edit files after opening the new chat.
-
-First retrieve this handoff, inspect the new repository, research Azure IoT Edge 1.6 / EdgeHub / EdgeAgent MQTT support and the current SDK path, and summarize the verified design before implementation begins.
+Do not start MQTT coding before the architecture and SDK path are verified.
